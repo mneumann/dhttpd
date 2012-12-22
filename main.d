@@ -3,6 +3,7 @@ import std.stdio;
 import std.socket;
 import std.conv;
 import std.concurrency;
+import std.parallelism;
 
 class MyHttpParser : HttpParser.HttpParser
 {
@@ -179,8 +180,6 @@ void s(Socket conn)
 
 void main(string[] args)
 {
-  test();
-  return;
 /*
   for (int i=0; i < 1; ++i)
   {
@@ -211,14 +210,19 @@ void main(string[] args)
   TcpSocket server = new TcpSocket();
 
   ushort port = to!ushort(args[1]);
-  server.bind(parseAddress("127.0.0.1", port));
+  auto addr = new InternetAddress(InternetAddress.parse("127.0.0.1"), port);
+  //auto addr = parseAddress("127.0.0.1", port)
+  server.bind(addr);
   server.listen(10);
   scope(exit) server.shutdown(SocketShutdown.BOTH);
   scope(exit) server.close();
   writeln("ready to accept on port ", port);
 
+  defaultPoolThreads(4);
+
   for (;;) {
-    Socket conn = server.accept();
-    s(conn);
+    auto conn = server.accept();
+    auto t = task(&s, conn);
+    taskPool.put(t);
   }
 }
