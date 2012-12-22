@@ -27,10 +27,10 @@
   absolute_uri = (scheme ":" (uchar | reserved )*);
 
   path = ( pchar+ ( "/" pchar* )* ) ;
-  query = ( uchar | reserved )* %query_string ;
+  query = ( uchar | reserved )* %query;
   param = ( pchar | "/" )* ;
   params = ( param ( ";" param )* ) ;
-  rel_path = ( path? %request_path (";" params)? ) ("?" %start_query query)?;
+  rel_path = ( path? %request_path (";" params)? ) ("?" %mark_query query)?;
   absolute_path = ( "/"+ rel_path );
 
   Request_URI = ( "*" | absolute_uri | absolute_path ) >mark %request_uri;
@@ -41,11 +41,17 @@
   HTTP_Version = ( "HTTP/" http_number ) >mark %http_version ;
   Request_Line = ( Method " " Request_URI ("#" Fragment){0,1} " " HTTP_Version CRLF ) ;
 
-  field_name = ( token -- ":" )+ >mark %write_field;
+  field_name = ( token -- ":" )+ >mark %field_name;
+  field_value = any* >mark;
+  field_delim = ":" " "*;
 
-  field_value = any* >mark %write_value;
+  field = ("Accept"i field_delim field_value %field_accept)
+        | ("Accept-Charset"i field_delim field_value %field_accept_charset)
+        | ("Cookie"i field_delim field_value %field_cookie)
+        | ("Date"i field_delim field_value %field_date)
+        | (field_name field_delim field_value %field_value);
 
-  message_header = field_name ":" " "* field_value :> CRLF;
+  message_header = field :> CRLF;
 
   Request = Request_Line ( message_header )* ( CRLF @done );
 

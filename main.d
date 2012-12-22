@@ -4,49 +4,89 @@ import std.socket;
 import std.conv;
 import std.concurrency;
 
-class MyHttpParser : HttpParser
+class MyHttpParser : HttpParser.HttpParser
 {
-  public string[string] headers;
+  char buffer[];
 
-  void on_http_field(const char field[], const char value[])
+  int num_fields = 0; 
+  BytePosRange2 _fields[10];
+
+  BytePosRange _request_uri;
+  BytePosRange _fragment;
+  BytePosRange _request_method;
+  BytePosRange _http_version;
+  BytePosRange _request_path;
+  BytePosRange _query;
+  BytePosRange _body_part;
+
+  BytePosRange _field_accept;
+  BytePosRange _field_accept_charset;
+  BytePosRange _field_cookie;
+  BytePosRange _field_date;
+
+  void on_request_uri(BytePosRange r) { _request_uri = r; }
+  void on_fragment(BytePosRange r) { _fragment = r; }
+  void on_request_method(BytePosRange r) { _request_method = r; }
+  void on_http_version(BytePosRange r) { _http_version = r; }
+  void on_request_path(BytePosRange r) { _request_path = r; }
+  void on_query(BytePosRange r) { _query = r; }
+  void on_header_done(BytePosRange r) { _body_part = r; }
+
+  void on_field_accept(BytePosRange r) { _field_accept = r; }
+  void on_field_accept_charset(BytePosRange r) { _field_accept_charset = r; }
+  void on_field_cookie(BytePosRange r) { _field_cookie = r; }
+  void on_field_date(BytePosRange r) { _field_date = r; }
+
+  void on_field(BytePosRange2 name_value)
   {
-    headers["HTTP_" ~ field.idup] = value.idup;
+    assert(num_fields < _fields.length);
+    _fields[num_fields++] = name_value;
   }
 
-  void on_request_method(const char str[])
-  {
-    headers["REQUEST_METHOD"] = str.idup;
+  @property char[] request_uri() {
+    return buffer[_request_uri.from .. _request_uri.to];
   }
 
-  void on_request_path(const char str[])
-  {
-    headers["REQUEST_PATH"] = str.idup; 
+  @property char[] fragment() {
+    return buffer[_fragment.from .. _fragment.to];
   }
 
-  void on_request_uri(const char str[])
-  {
-    headers["REQUEST_URI"] = str.idup;
+  @property char[] request_method() {
+    return buffer[_request_method.from .. _request_method.to];
   }
 
-  void on_query_string(const char str[])
-  {
-    headers["QUERY_STRING"] = str.idup;
+  @property char[] http_version() {
+    return buffer[_http_version.from .. _http_version.to];
   }
 
-  void on_fragment(const char str[])
-  {
-    headers["FRAGMENT"] = str.idup;
+  @property char[] request_path() {
+    return buffer[_request_path.from .. _request_path.to];
   }
 
-  void on_http_version(const char str[])
-  {
-    headers["HTTP_VERSION"] = str.idup;
+  @property char[] query() {
+    return buffer[_query.from .. _query.to];
   }
 
-  void on_header_done(const char str[])
-  {
-    //writefln("<%s>", str);
+  @property char[] body_part() {
+    return buffer[_body_part.from .. _body_part.to];
   }
+
+  @property char[] field_accept() {
+    return buffer[_field_accept.from .. _field_accept.to];
+  }
+
+  @property char[] field_accept_charset() {
+    return buffer[_field_accept_charset.from .. _field_accept_charset.to];
+  }
+
+  @property char[] field_cookie() {
+    return buffer[_field_cookie.from .. _field_cookie.to];
+  }
+
+  @property char[] field_date() {
+    return buffer[_field_date.from .. _field_date.to];
+  }
+
 }
 
 void handle_connection(Socket s, char [] buffer)
@@ -113,6 +153,15 @@ string test()
 
   auto r = p.execute(buffer); 
 
+  p.buffer = buffer;
+  writeln(p.request_uri);
+  writeln(p.fragment);
+  writeln(p.query);
+  writeln(p.field_date);
+  writeln(p.body_part);
+
+  //writeln(p.headers);
+
   string html = "<html><body>Hey Leute</body></html>";
   string response = "HTTP/1.0 200 OK\r\n"
               "Content-Type: text/html\r\n" 
@@ -130,6 +179,8 @@ void s(Socket conn)
 
 void main(string[] args)
 {
+  test();
+  return;
 /*
   for (int i=0; i < 1; ++i)
   {

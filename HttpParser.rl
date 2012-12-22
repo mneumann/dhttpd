@@ -9,80 +9,70 @@
 
 import std.stdio;
 
-static char upcase_char(char c)
-{
-    if (c >= 'a' && c <= 'z')
-      return (c & ~0x20);
-    else if (c == '-')
-      return ('_');
-    else
-      return c;
-}
-
-static void upcase_str(char []str)
-{
-  foreach (ref char c; str)
-  {
-    c = upcase_char(c);
-  }
-}
-
 /** Machine **/
 
 %%{
   
   machine http_parser;
 
-  action mark { mark = fpc; }
+  action mark {
+    mark = cast(BytePos)(fpc - buffer.ptr);
+  }
 
   action request_uri {
-    on_request_uri(get_mark_str(mark, fpc, buffer));
-    mark = null;
+    on_request_uri(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
   }
 
   action fragment {
-    on_fragment(get_mark_str(mark, fpc, buffer));
-    mark = null;
+    on_fragment(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
   }
 
   action request_method { 
-    on_request_method(get_mark_str(mark, fpc, buffer));
-    mark = null;
+    on_request_method(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
   }
 
   action http_version {	
-    on_http_version(get_mark_str(mark, fpc, buffer));
-    mark = null;
-  }
-
-  action write_field {
-    saved_field = get_mark_str(mark, fpc, buffer);
-    upcase_str(saved_field);
-    mark = null;
-  }
-
-  action write_value {
-    on_http_field(saved_field, get_mark_str(mark, fpc, buffer));
-    saved_field.length = 0;
-    mark = null;
+    on_http_version(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
   }
 
   action request_path {
-    on_request_path(get_mark_str(mark, fpc, buffer));
+    on_request_path(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
   }
 
-  action start_query { 
-    assert(mark);
-    query_pos = saved_mark_buf.length + (fpc - mark);
+  action mark_query { 
+    mark_query = cast(BytePos)(fpc - buffer.ptr);
   }
 
-  action query_string {
-    on_query_string(get_mark_str(mark, fpc, buffer)[query_pos..$]);
-    query_pos = 0;
+  action query {
+    on_query(BytePosRange(mark_query, cast(BytePos)(fpc - buffer.ptr)));
   }
 
-  action done { 
-    on_header_done(buffer[(fpc - buffer.ptr + 1) .. $]);
+  action field_accept {
+    on_field_accept(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_accept_charset {
+    on_field_accept_charset(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_cookie {
+    on_field_cookie(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_date {
+    on_field_date(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_name {
+    field_name = BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr));
+  }
+
+  action field_value {
+    on_field(BytePosRange2(field_name, BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr))));
+  }
+
+  action done {
+    on_header_done(BytePosRange(cast(BytePos)(fpc - buffer.ptr + 1), cast(BytePos)(buffer.length)));
     fbreak;
   }
 
@@ -93,25 +83,44 @@ static void upcase_str(char []str)
 /** Data **/
 %% write data;
 
+alias uint BytePos;
+
+struct BytePosRange {
+  this(BytePos f, BytePos t) { from = f; to = t; }
+  BytePos from;
+  BytePos to;
+};
+
+struct BytePosRange2 {
+  this(BytePosRange _a, BytePosRange _b) { a = _a; b = _b; }
+  BytePosRange a;
+  BytePosRange b;
+};
+
 class HttpParser
 {
-  int saved_cs;
-  char saved_mark_buf[];
-  char saved_field[];
+  private int saved_cs;
 
-  size_t nread;
+  private BytePos mark;
+  private BytePos mark_query;
+  private BytePosRange field_name;
 
-  private size_t query_pos;
+  private size_t nread;
 
   // dummy visitor 
-  void on_http_version(const char v[]) {}
-  void on_http_field(const char field[], const char value[]) {}
-  void on_request_method(const char v[]) {}
-  void on_request_uri(const char v[]) {}
-  void on_request_path(const char v[]) {}
-  void on_query_string(const char v[]) {}
-  void on_fragment(const char v[]) {}
-  void on_header_done(const char v[]) {}
+  void on_request_uri(BytePosRange r) {}
+  void on_fragment(BytePosRange r) {}
+  void on_request_method(BytePosRange r) {}
+  void on_http_version(BytePosRange r) {}
+  void on_request_path(BytePosRange r) {}
+  void on_query(BytePosRange r) {}
+  void on_header_done(BytePosRange r) {}
+
+  void on_field_accept(BytePosRange r) {}
+  void on_field_accept_charset(BytePosRange r) {}
+  void on_field_cookie(BytePosRange r) {}
+  void on_field_date(BytePosRange r) {}
+  void on_field(BytePosRange2 name_value) {}
 
   this()
   {
@@ -120,46 +129,20 @@ class HttpParser
     saved_cs = cs;
   }
 
-  char[] get_mark_str(char *mark, char *fpc, char buffer[])
+  size_t execute(const char buffer[])
   {
-    assert(mark);
-    auto buf = saved_mark_buf ~ buffer[(mark - buffer.ptr) .. (fpc - buffer.ptr)];
-    saved_mark_buf.length = 0;
-    return buf;
-  }
+    assert(buffer.length > 0);
 
-  /** exec **/
-
-  size_t execute(/*const*/ char buffer[])
-  {
     // Ragel uses: cs, p, pe
     int cs = saved_cs;           // current ragel machine state
-    assert(buffer.length > 0);
-    /*const*/ char *p = &buffer[0];        // pointer to start of data
-    /*const*/ char *pe = &buffer[$-1] + 1; // pointer to end of data
+    const(char) *p = &buffer[0];        // pointer to start of data
+    const(char) *pe = &buffer[$-1] + 1; // pointer to end of data
 
-    /*const*/ char *mark = null;
- 
-    if (saved_mark_buf.length > 0)
-    {
-      // we are in an mark section so continue the marking
-      mark = p;
-    }
-
-    // exec begin
     %% write exec;
-    // exec end
 
     if (!has_error())
     {
       saved_cs = cs;
-    }
-
-    if (mark)
-    {
-      // within a marking the buffer ends. save what we currently read in
-      saved_mark_buf ~= buffer[(mark - buffer.ptr) .. $];
-      assert(saved_mark_buf.length > 0);
     }
 
     nread += (p - buffer.ptr);
@@ -187,4 +170,4 @@ class HttpParser
   bool is_finished() {
     return (saved_cs >= http_parser_first_final);
   }
-};
+}
