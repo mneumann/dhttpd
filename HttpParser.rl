@@ -55,12 +55,152 @@ import std.stdio;
     on_field_accept_charset(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
   }
 
+  action field_accept_encoding {
+    on_field_accept_encoding(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_accept_language {
+    on_field_accept_language(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_accept_datetime {
+    on_field_accept_datetime(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_authorization {
+    on_field_authorization(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_cache_control {
+    on_field_cache_control(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_connection {
+    on_field_connection(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
   action field_cookie {
     on_field_cookie(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
   }
 
+  action field_content_length {
+    on_field_content_length(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_content_md5 {
+    on_field_content_md5(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_content_type {
+    on_field_content_type(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
   action field_date {
     on_field_date(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_expect {
+    on_field_date(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_from {
+    on_field_from(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_host {
+    on_field_host(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_if_match {
+    on_field_if_match(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_if_modified_since {
+    on_field_if_modified_since(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_if_none_match {
+    on_field_if_none_match(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_if_range {
+    on_field_if_range(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_if_unmodified_since {
+    on_field_if_unmodified_since(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_max_forwards {
+    on_field_max_forwards(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_pragma {
+    on_field_pragma(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_proxy_authorization {
+    on_field_proxy_authorization(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_range {
+    on_field_range(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_referer {
+    on_field_referer(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_te {
+    on_field_te(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_upgrade {
+    on_field_upgrade(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_user_agent {
+    on_field_user_agent(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_via {
+    on_field_via(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_warning {
+    on_field_warning(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_x_requested_with {
+    on_field_x_requested_with(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_dnt {
+    on_field_dnt(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_x_forwarded_for {
+    on_field_x_forwarded_for(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_x_forwarded_proto {
+    on_field_x_forwarded_for(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_front_end_https {
+    on_field_front_end_https(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_x_att_deviceid {
+    on_field_x_att_deviceid(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_x_wap_profile {
+    on_field_x_wap_profile(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
+  }
+
+  action field_proxy_connection {
+    on_field_proxy_connection(BytePosRange(mark, cast(BytePos)(fpc - buffer.ptr)));
   }
 
   action field_name {
@@ -118,8 +258,46 @@ class HttpParser
 
   void on_field_accept(BytePosRange r) {}
   void on_field_accept_charset(BytePosRange r) {}
+  void on_field_accept_encoding(BytePosRange r) {}
+  void on_field_accept_language(BytePosRange r) {}
+  void on_field_accept_datetime(BytePosRange r) {}
+  void on_field_authorization(BytePosRange r) {}
+
+  void on_field_cache_control(BytePosRange r) {}
+  void on_field_connection(BytePosRange r) {}
   void on_field_cookie(BytePosRange r) {}
+  void on_field_content_length(BytePosRange r) {}
+  void on_field_content_md5(BytePosRange r) {}
+  void on_field_content_type(BytePosRange r) {}
   void on_field_date(BytePosRange r) {}
+  void on_field_expect(BytePosRange r) {}
+  void on_field_from(BytePosRange r) {}
+  void on_field_host(BytePosRange r) {}
+  void on_field_if_match(BytePosRange r) {}
+  void on_field_if_modified_since(BytePosRange r) {}
+  void on_field_if_none_match(BytePosRange r) {}
+  void on_field_if_range(BytePosRange r) {}
+  void on_field_if_unmodified_since(BytePosRange r) {}
+  void on_field_max_forwards(BytePosRange r) {}
+  void on_field_pragma(BytePosRange r) {}
+  void on_field_proxy_authorization(BytePosRange r) {}
+  void on_field_range(BytePosRange r) {}
+  void on_field_referer(BytePosRange r) {}
+  void on_field_te(BytePosRange r) {}
+  void on_field_upgrade(BytePosRange r) {}
+  void on_field_user_agent(BytePosRange r) {}
+  void on_field_via(BytePosRange r) {}
+  void on_field_warning(BytePosRange r) {}
+
+  void on_field_x_requested_with(BytePosRange r) {}
+  void on_field_dnt(BytePosRange r) {}
+  void on_field_x_forwarded_for(BytePosRange r) {}
+  void on_field_x_forwarded_proto(BytePosRange r) {}
+  void on_field_front_end_https(BytePosRange r) {}
+  void on_field_x_att_deviceid(BytePosRange r) {}
+  void on_field_x_wap_profile(BytePosRange r) {}
+  void on_field_proxy_connection(BytePosRange r) {}
+
   void on_field(BytePosRange2 name_value) {}
 
   this()
