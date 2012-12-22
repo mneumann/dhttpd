@@ -9,25 +9,35 @@
 
 // compile with ragel -G2 -D ...
 
-/*
-static void snake_upcase_char(char *c)
+import std.stdio;
+
+static char upcase_char(char c)
 {
-    if (*c >= 'a' && *c <= 'z')
-      *c &= ~0x20;
-    else if (*c == '-')
-      *c = '_';
+    if (c >= 'a' && c <= 'z')
+      return (c & ~0x20);
+    else if (c == '-')
+      return ('_');
+    else
+      return c;
 }
-*/
+
+static void upcase_str(char []str)
+{
+  foreach (ref char c; str)
+  {
+    c = upcase_char(c);
+  }
+}
 
 /** Machine **/
 
 
-#line 72 "HttpParser.rl"
+#line 91 "HttpParser.rl"
 
 
 /** Data **/
 
-#line 31 "HttpParser.d"
+#line 41 "HttpParser.d"
 static const int http_parser_start = 1;
 static const int http_parser_first_final = 57;
 static const int http_parser_error = 0;
@@ -35,18 +45,17 @@ static const int http_parser_error = 0;
 static const int http_parser_en_main = 1;
 
 
-#line 76 "HttpParser.rl"
+#line 95 "HttpParser.rl"
 
 class HttpParser
 {
   int saved_cs;
-  size_t body_start;
-  size_t nread;
-  size_t mark;
+  char saved_mark_buf[];
+  char saved_field[];
 
-  size_t field_start;
-  size_t field_end;
-  size_t query_start;
+  size_t nread;
+
+  private size_t query_pos;
 
   // dummy visitor 
   void on_http_version(const char v[]) {}
@@ -58,44 +67,48 @@ class HttpParser
   void on_fragment(const char v[]) {}
   void on_header_done(const char v[]) {}
 
-  size_t current_position(const char buffer[], const char *fpc)
-  {
-    assert(fpc >= buffer.ptr);
-    return fpc - buffer.ptr;
-  }
-
   this()
   {
     int cs = 0;
     
-#line 72 "HttpParser.d"
+#line 75 "HttpParser.d"
 	{
 	cs = http_parser_start;
 	}
 
-#line 108 "HttpParser.rl"
+#line 120 "HttpParser.rl"
     saved_cs = cs;
+  }
+
+  char[] get_mark_str(char *mark, char *fpc, char buffer[])
+  {
+    assert(mark);
+    auto buf = saved_mark_buf ~ buffer[(mark - buffer.ptr) .. (fpc - buffer.ptr)];
+    saved_mark_buf.length = 0;
+    return buf;
   }
 
   /** exec **/
 
-  //
-  // The passed buffer must always contain *all* data.
-  //
-  size_t execute(char buffer[], size_t off)
+  size_t execute(/*const*/ char buffer[])
   {
     // Ragel uses: cs, p, pe
-    char *p = &buffer[off];      // pointer to start of data
-    char *pe = &buffer[$-1] + 1; // pointer to end of data
-    int cs = saved_cs;                  // current ragel machine state 
+    int cs = saved_cs;           // current ragel machine state
+    assert(buffer.length > 0);
+    /*const*/ char *p = &buffer[0];        // pointer to start of data
+    /*const*/ char *pe = &buffer[$-1] + 1; // pointer to end of data
 
-    assert(off <= buffer.length); // offset past end of buffer
-
-    assert(pe - p == buffer.length - off); // pointers aren't same distance
+    /*const*/ char *mark = null;
+ 
+    if (saved_mark_buf.length > 0)
+    {
+      // we are in an mark section so continue the marking
+      mark = p;
+    }
 
     // exec begin
     
-#line 99 "HttpParser.d"
+#line 112 "HttpParser.d"
 	{
 	if ( p == pe )
 		goto _test_eof;
@@ -120,14 +133,14 @@ st0:
 cs = 0;
 	goto _out;
 tr0:
-#line 26 "HttpParser.rl"
-	{ mark = current_position(buffer, p); }
+#line 36 "HttpParser.rl"
+	{ mark = p; }
 	goto st2;
 st2:
 	if ( ++p == pe )
 		goto _test_eof2;
 case 2:
-#line 131 "HttpParser.d"
+#line 144 "HttpParser.d"
 	switch( (*p) ) {
 		case 32u: goto tr2;
 		case 36u: goto st38;
@@ -144,16 +157,17 @@ case 2:
 		goto st38;
 	goto st0;
 tr2:
-#line 38 "HttpParser.rl"
+#line 48 "HttpParser.rl"
 	{ 
-    on_request_method(buffer[mark .. current_position(buffer, p)]);
+    on_request_method(get_mark_str(mark, p, buffer));
+    mark = null;
   }
 	goto st3;
 st3:
 	if ( ++p == pe )
 		goto _test_eof3;
 case 3:
-#line 157 "HttpParser.d"
+#line 171 "HttpParser.d"
 	switch( (*p) ) {
 		case 42u: goto tr4;
 		case 43u: goto tr5;
@@ -171,14 +185,14 @@ case 3:
 		goto tr5;
 	goto st0;
 tr4:
-#line 26 "HttpParser.rl"
-	{ mark = current_position(buffer, p); }
+#line 36 "HttpParser.rl"
+	{ mark = p; }
 	goto st4;
 st4:
 	if ( ++p == pe )
 		goto _test_eof4;
 case 4:
-#line 182 "HttpParser.d"
+#line 196 "HttpParser.d"
 	switch( (*p) ) {
 		case 32u: goto tr8;
 		case 35u: goto tr9;
@@ -186,74 +200,85 @@ case 4:
 	}
 	goto st0;
 tr8:
-#line 42 "HttpParser.rl"
-	{ 
-    on_request_uri(buffer[mark .. current_position(buffer, p)]);
+#line 38 "HttpParser.rl"
+	{
+    on_request_uri(get_mark_str(mark, p, buffer));
+    mark = null;
   }
 	goto st5;
 tr30:
-#line 26 "HttpParser.rl"
-	{ mark = current_position(buffer, p); }
-#line 46 "HttpParser.rl"
+#line 36 "HttpParser.rl"
+	{ mark = p; }
+#line 43 "HttpParser.rl"
 	{
-    on_fragment(buffer[mark .. current_position(buffer, p)]);
+    on_fragment(get_mark_str(mark, p, buffer));
+    mark = null;
   }
 	goto st5;
 tr33:
-#line 46 "HttpParser.rl"
+#line 43 "HttpParser.rl"
 	{
-    on_fragment(buffer[mark .. current_position(buffer, p)]);
+    on_fragment(get_mark_str(mark, p, buffer));
+    mark = null;
   }
 	goto st5;
 tr41:
-#line 60 "HttpParser.rl"
+#line 70 "HttpParser.rl"
 	{
-    on_request_path(buffer[mark .. current_position(buffer, p)]);
+    on_request_path(get_mark_str(mark, p, buffer));
   }
-#line 42 "HttpParser.rl"
-	{ 
-    on_request_uri(buffer[mark .. current_position(buffer, p)]);
+#line 38 "HttpParser.rl"
+	{
+    on_request_uri(get_mark_str(mark, p, buffer));
+    mark = null;
   }
 	goto st5;
 tr52:
-#line 50 "HttpParser.rl"
-	{ query_start = current_position(buffer, p); }
-#line 52 "HttpParser.rl"
-	{
-    on_query_string(buffer[query_start .. current_position(buffer, p)]);
-  }
-#line 42 "HttpParser.rl"
+#line 74 "HttpParser.rl"
 	{ 
-    on_request_uri(buffer[mark .. current_position(buffer, p)]);
+    assert(mark);
+    query_pos = saved_mark_buf.length + (p - mark);
+  }
+#line 79 "HttpParser.rl"
+	{
+    on_query_string(get_mark_str(mark, p, buffer)[query_pos..$]);
+    query_pos = 0;
+  }
+#line 38 "HttpParser.rl"
+	{
+    on_request_uri(get_mark_str(mark, p, buffer));
+    mark = null;
   }
 	goto st5;
 tr56:
-#line 52 "HttpParser.rl"
+#line 79 "HttpParser.rl"
 	{
-    on_query_string(buffer[query_start .. current_position(buffer, p)]);
+    on_query_string(get_mark_str(mark, p, buffer)[query_pos..$]);
+    query_pos = 0;
   }
-#line 42 "HttpParser.rl"
-	{ 
-    on_request_uri(buffer[mark .. current_position(buffer, p)]);
+#line 38 "HttpParser.rl"
+	{
+    on_request_uri(get_mark_str(mark, p, buffer));
+    mark = null;
   }
 	goto st5;
 st5:
 	if ( ++p == pe )
 		goto _test_eof5;
 case 5:
-#line 245 "HttpParser.d"
+#line 270 "HttpParser.d"
 	if ( (*p) == 72u )
 		goto tr10;
 	goto st0;
 tr10:
-#line 26 "HttpParser.rl"
-	{ mark = current_position(buffer, p); }
+#line 36 "HttpParser.rl"
+	{ mark = p; }
 	goto st6;
 st6:
 	if ( ++p == pe )
 		goto _test_eof6;
 case 6:
-#line 257 "HttpParser.d"
+#line 282 "HttpParser.d"
 	if ( (*p) == 84u )
 		goto st7;
 	goto st0;
@@ -311,32 +336,35 @@ case 13:
 		goto st13;
 	goto st0;
 tr18:
-#line 56 "HttpParser.rl"
+#line 53 "HttpParser.rl"
 	{	
-    on_http_version(buffer[mark .. current_position(buffer, p)]);
+    on_http_version(get_mark_str(mark, p, buffer));
+    mark = null;
   }
 	goto st14;
 tr26:
-#line 32 "HttpParser.rl"
-	{ mark = current_position(buffer, p); }
-#line 33 "HttpParser.rl"
+#line 36 "HttpParser.rl"
+	{ mark = p; }
+#line 64 "HttpParser.rl"
 	{
-    on_http_field(buffer[field_start .. field_end],
-                  buffer[mark .. current_position(buffer, p)]);
+    on_http_field(saved_field, get_mark_str(mark, p, buffer));
+    saved_field.length = 0;
+    mark = null;
   }
 	goto st14;
 tr29:
-#line 33 "HttpParser.rl"
+#line 64 "HttpParser.rl"
 	{
-    on_http_field(buffer[field_start .. field_end],
-                  buffer[mark .. current_position(buffer, p)]);
+    on_http_field(saved_field, get_mark_str(mark, p, buffer));
+    saved_field.length = 0;
+    mark = null;
   }
 	goto st14;
 st14:
 	if ( ++p == pe )
 		goto _test_eof14;
 case 14:
-#line 340 "HttpParser.d"
+#line 368 "HttpParser.d"
 	if ( (*p) == 10u )
 		goto st15;
 	goto st0;
@@ -377,10 +405,9 @@ case 16:
 		goto tr22;
 	goto st0;
 tr22:
-#line 64 "HttpParser.rl"
+#line 84 "HttpParser.rl"
 	{ 
-    body_start = current_position(buffer, p) + 1;
-    on_header_done(buffer[body_start .. $]);
+    on_header_done(buffer[(p - buffer.ptr + 1) .. $]);
     {p++; cs = 57; if (true) goto _out;}
   }
 	goto st57;
@@ -388,61 +415,59 @@ st57:
 	if ( ++p == pe )
 		goto _test_eof57;
 case 57:
-#line 392 "HttpParser.d"
+#line 419 "HttpParser.d"
 	goto st0;
 tr21:
-#line 28 "HttpParser.rl"
-	{ field_start = current_position(buffer, p); }
-#line 29 "HttpParser.rl"
-	{ /*snake_upcase_char(fpc);*/ }
-	goto st17;
-tr23:
-#line 29 "HttpParser.rl"
-	{ /*snake_upcase_char(fpc);*/ }
+#line 36 "HttpParser.rl"
+	{ mark = p; }
 	goto st17;
 st17:
 	if ( ++p == pe )
 		goto _test_eof17;
 case 17:
-#line 408 "HttpParser.d"
+#line 429 "HttpParser.d"
 	switch( (*p) ) {
-		case 33u: goto tr23;
+		case 33u: goto st17;
 		case 58u: goto tr24;
-		case 124u: goto tr23;
-		case 126u: goto tr23;
+		case 124u: goto st17;
+		case 126u: goto st17;
 		default: break;
 	}
 	if ( (*p) < 45u ) {
 		if ( (*p) > 39u ) {
 			if ( 42u <= (*p) && (*p) <= 43u )
-				goto tr23;
+				goto st17;
 		} else if ( (*p) >= 35u )
-			goto tr23;
+			goto st17;
 	} else if ( (*p) > 46u ) {
 		if ( (*p) < 65u ) {
 			if ( 48u <= (*p) && (*p) <= 57u )
-				goto tr23;
+				goto st17;
 		} else if ( (*p) > 90u ) {
 			if ( 94u <= (*p) && (*p) <= 122u )
-				goto tr23;
+				goto st17;
 		} else
-			goto tr23;
+			goto st17;
 	} else
-		goto tr23;
+		goto st17;
 	goto st0;
-tr24:
-#line 30 "HttpParser.rl"
-	{ field_end = current_position(buffer, p); }
-	goto st18;
 tr27:
-#line 32 "HttpParser.rl"
-	{ mark = current_position(buffer, p); }
+#line 36 "HttpParser.rl"
+	{ mark = p; }
+	goto st18;
+tr24:
+#line 58 "HttpParser.rl"
+	{
+    saved_field = get_mark_str(mark, p, buffer);
+    upcase_str(saved_field);
+    mark = null;
+  }
 	goto st18;
 st18:
 	if ( ++p == pe )
 		goto _test_eof18;
 case 18:
-#line 446 "HttpParser.d"
+#line 471 "HttpParser.d"
 	switch( (*p) ) {
 		case 13u: goto tr26;
 		case 32u: goto tr27;
@@ -450,60 +475,69 @@ case 18:
 	}
 	goto tr25;
 tr25:
-#line 32 "HttpParser.rl"
-	{ mark = current_position(buffer, p); }
+#line 36 "HttpParser.rl"
+	{ mark = p; }
 	goto st19;
 st19:
 	if ( ++p == pe )
 		goto _test_eof19;
 case 19:
-#line 461 "HttpParser.d"
+#line 486 "HttpParser.d"
 	if ( (*p) == 13u )
 		goto tr29;
 	goto st19;
 tr9:
-#line 42 "HttpParser.rl"
-	{ 
-    on_request_uri(buffer[mark .. current_position(buffer, p)]);
+#line 38 "HttpParser.rl"
+	{
+    on_request_uri(get_mark_str(mark, p, buffer));
+    mark = null;
   }
 	goto st20;
 tr43:
-#line 60 "HttpParser.rl"
+#line 70 "HttpParser.rl"
 	{
-    on_request_path(buffer[mark .. current_position(buffer, p)]);
+    on_request_path(get_mark_str(mark, p, buffer));
   }
-#line 42 "HttpParser.rl"
-	{ 
-    on_request_uri(buffer[mark .. current_position(buffer, p)]);
+#line 38 "HttpParser.rl"
+	{
+    on_request_uri(get_mark_str(mark, p, buffer));
+    mark = null;
   }
 	goto st20;
 tr54:
-#line 50 "HttpParser.rl"
-	{ query_start = current_position(buffer, p); }
-#line 52 "HttpParser.rl"
-	{
-    on_query_string(buffer[query_start .. current_position(buffer, p)]);
-  }
-#line 42 "HttpParser.rl"
+#line 74 "HttpParser.rl"
 	{ 
-    on_request_uri(buffer[mark .. current_position(buffer, p)]);
+    assert(mark);
+    query_pos = saved_mark_buf.length + (p - mark);
+  }
+#line 79 "HttpParser.rl"
+	{
+    on_query_string(get_mark_str(mark, p, buffer)[query_pos..$]);
+    query_pos = 0;
+  }
+#line 38 "HttpParser.rl"
+	{
+    on_request_uri(get_mark_str(mark, p, buffer));
+    mark = null;
   }
 	goto st20;
 tr58:
-#line 52 "HttpParser.rl"
+#line 79 "HttpParser.rl"
 	{
-    on_query_string(buffer[query_start .. current_position(buffer, p)]);
+    on_query_string(get_mark_str(mark, p, buffer)[query_pos..$]);
+    query_pos = 0;
   }
-#line 42 "HttpParser.rl"
-	{ 
-    on_request_uri(buffer[mark .. current_position(buffer, p)]);
+#line 38 "HttpParser.rl"
+	{
+    on_request_uri(get_mark_str(mark, p, buffer));
+    mark = null;
   }
 	goto st20;
 st20:
 	if ( ++p == pe )
 		goto _test_eof20;
 case 20:
-#line 507 "HttpParser.d"
+#line 541 "HttpParser.d"
 	switch( (*p) ) {
 		case 32u: goto tr30;
 		case 37u: goto tr32;
@@ -519,14 +553,14 @@ case 20:
 		goto st0;
 	goto tr31;
 tr31:
-#line 26 "HttpParser.rl"
-	{ mark = current_position(buffer, p); }
+#line 36 "HttpParser.rl"
+	{ mark = p; }
 	goto st21;
 st21:
 	if ( ++p == pe )
 		goto _test_eof21;
 case 21:
-#line 530 "HttpParser.d"
+#line 564 "HttpParser.d"
 	switch( (*p) ) {
 		case 32u: goto tr33;
 		case 37u: goto st22;
@@ -542,14 +576,14 @@ case 21:
 		goto st0;
 	goto st21;
 tr32:
-#line 26 "HttpParser.rl"
-	{ mark = current_position(buffer, p); }
+#line 36 "HttpParser.rl"
+	{ mark = p; }
 	goto st22;
 st22:
 	if ( ++p == pe )
 		goto _test_eof22;
 case 22:
-#line 553 "HttpParser.d"
+#line 587 "HttpParser.d"
 	if ( (*p) < 65u ) {
 		if ( 48u <= (*p) && (*p) <= 57u )
 			goto st23;
@@ -573,14 +607,14 @@ case 23:
 		goto st21;
 	goto st0;
 tr5:
-#line 26 "HttpParser.rl"
-	{ mark = current_position(buffer, p); }
+#line 36 "HttpParser.rl"
+	{ mark = p; }
 	goto st24;
 st24:
 	if ( ++p == pe )
 		goto _test_eof24;
 case 24:
-#line 584 "HttpParser.d"
+#line 618 "HttpParser.d"
 	switch( (*p) ) {
 		case 43u: goto st24;
 		case 58u: goto st25;
@@ -599,14 +633,14 @@ case 24:
 		goto st24;
 	goto st0;
 tr7:
-#line 26 "HttpParser.rl"
-	{ mark = current_position(buffer, p); }
+#line 36 "HttpParser.rl"
+	{ mark = p; }
 	goto st25;
 st25:
 	if ( ++p == pe )
 		goto _test_eof25;
 case 25:
-#line 610 "HttpParser.d"
+#line 644 "HttpParser.d"
 	switch( (*p) ) {
 		case 32u: goto tr8;
 		case 34u: goto st0;
@@ -647,14 +681,14 @@ case 27:
 		goto st25;
 	goto st0;
 tr6:
-#line 26 "HttpParser.rl"
-	{ mark = current_position(buffer, p); }
+#line 36 "HttpParser.rl"
+	{ mark = p; }
 	goto st28;
 st28:
 	if ( ++p == pe )
 		goto _test_eof28;
 case 28:
-#line 658 "HttpParser.d"
+#line 692 "HttpParser.d"
 	switch( (*p) ) {
 		case 32u: goto tr41;
 		case 34u: goto st0;
@@ -697,16 +731,16 @@ case 30:
 		goto st28;
 	goto st0;
 tr45:
-#line 60 "HttpParser.rl"
+#line 70 "HttpParser.rl"
 	{
-    on_request_path(buffer[mark .. current_position(buffer, p)]);
+    on_request_path(get_mark_str(mark, p, buffer));
   }
 	goto st31;
 st31:
 	if ( ++p == pe )
 		goto _test_eof31;
 case 31:
-#line 710 "HttpParser.d"
+#line 744 "HttpParser.d"
 	switch( (*p) ) {
 		case 32u: goto tr8;
 		case 34u: goto st0;
@@ -748,16 +782,16 @@ case 33:
 		goto st31;
 	goto st0;
 tr46:
-#line 60 "HttpParser.rl"
+#line 70 "HttpParser.rl"
 	{
-    on_request_path(buffer[mark .. current_position(buffer, p)]);
+    on_request_path(get_mark_str(mark, p, buffer));
   }
 	goto st34;
 st34:
 	if ( ++p == pe )
 		goto _test_eof34;
 case 34:
-#line 761 "HttpParser.d"
+#line 795 "HttpParser.d"
 	switch( (*p) ) {
 		case 32u: goto tr52;
 		case 34u: goto st0;
@@ -772,14 +806,17 @@ case 34:
 		goto st0;
 	goto tr53;
 tr53:
-#line 50 "HttpParser.rl"
-	{ query_start = current_position(buffer, p); }
+#line 74 "HttpParser.rl"
+	{ 
+    assert(mark);
+    query_pos = saved_mark_buf.length + (p - mark);
+  }
 	goto st35;
 st35:
 	if ( ++p == pe )
 		goto _test_eof35;
 case 35:
-#line 783 "HttpParser.d"
+#line 820 "HttpParser.d"
 	switch( (*p) ) {
 		case 32u: goto tr56;
 		case 34u: goto st0;
@@ -794,14 +831,17 @@ case 35:
 		goto st0;
 	goto st35;
 tr55:
-#line 50 "HttpParser.rl"
-	{ query_start = current_position(buffer, p); }
+#line 74 "HttpParser.rl"
+	{ 
+    assert(mark);
+    query_pos = saved_mark_buf.length + (p - mark);
+  }
 	goto st36;
 st36:
 	if ( ++p == pe )
 		goto _test_eof36;
 case 36:
-#line 805 "HttpParser.d"
+#line 845 "HttpParser.d"
 	if ( (*p) < 65u ) {
 		if ( 48u <= (*p) && (*p) <= 57u )
 			goto st37;
@@ -1236,20 +1276,24 @@ case 56:
 	_out: {}
 	}
 
-#line 129 "HttpParser.rl"
+#line 151 "HttpParser.rl"
     // exec end
 
     if (!has_error())
+    {
       saved_cs = cs;
+    }
 
-    nread += p - (&buffer[off]);
+    if (mark)
+    {
+      // within a marking the buffer ends. save what we currently read in
+      saved_mark_buf ~= buffer[(mark - buffer.ptr) .. $];
+      assert(saved_mark_buf.length > 0);
+    }
+
+    nread += (p - buffer.ptr);
 
     assert(p <= pe); // buffer overflow after parsing execute
-    assert(nread <= buffer.length); // nread longer than length
-    assert(body_start <= buffer.length); // body starts after buffer end
-    assert(mark < buffer.length);  // mark is after buffer end
-    assert(field_end <= buffer.length); // field has length longer than whole buffer
-    assert(field_start < buffer.length); // field starts after buffer end
 
     return nread;
   }

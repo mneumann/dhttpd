@@ -1,8 +1,8 @@
 import HttpParser;
 import std.stdio;
 import std.socket;
-import std.socketstream;
 import std.conv;
+import std.concurrency;
 
 class MyHttpParser : HttpParser
 {
@@ -45,32 +45,47 @@ class MyHttpParser : HttpParser
 
   void on_header_done(const char str[])
   {
+    //writefln("<%s>", str);
   }
 }
 
-void handle_connection(Socket s, char buffer[])
+void handle_connection(Socket s, char [] buffer)
 {
+  scope(exit) s.shutdown(SocketShutdown.BOTH);
+  scope(exit) s.close();
+
   auto parser = new MyHttpParser();
 
-  auto ss = new SocketStream(s);
-
-  auto sz = ss.readBlock(buffer.ptr, buffer.length);
-
-  //writeln("got ", sz, " bytes");
-  //writeln("buffer: ", buffer);
-
-  auto r = parser.execute(buffer[0..sz], 0); 
-
-  if (parser.is_finished())
+  for (;;)
   {
-    //writeln("finished");
-    //writeln("headers: ", parser.headers);
-  }
-  else
-  {
-    return;
-  }
+    ptrdiff_t sz = 0;
 
+    for (;;) {
+      sz = s.receive(cast(void[])buffer);
+      if (sz == 0)
+      {
+        writeln("remote socket has closed connection");
+        return;
+      }
+      if (sz == Socket.ERROR)
+      {
+        writeln("Socket receive failed");
+        return;
+      }
+      if (sz > 0) break;
+    }
+
+    //writeln("got ", sz, " bytes");
+    //writeln("buffer: ", buffer);
+    auto r = parser.execute(buffer[0..sz]);
+    //writeln(r);
+    if (parser.is_finished())
+    {
+      //writeln("finished");
+      //writeln("headers: ", parser.headers);
+      break;
+    }
+  }
 
   string html = "<html><body>Hey Leute</body></html>";
   string response = "HTTP/1.0 200 OK\r\n"
@@ -80,7 +95,6 @@ void handle_connection(Socket s, char buffer[])
 
   // XXX: check send exactly all bytes.
   s.send(response);
-  //ss.writeBlock(response.ptr, response.length);
 }
 
 string test()
@@ -97,7 +111,7 @@ string test()
  
   auto buffer = req.dup;
 
-  auto r = p.execute(buffer, 0); 
+  auto r = p.execute(buffer); 
 
   string html = "<html><body>Hey Leute</body></html>";
   string response = "HTTP/1.0 200 OK\r\n"
@@ -108,15 +122,22 @@ string test()
   return response;
 }
 
+void s(Socket conn)
+{
+  auto buffer = new char[2048];
+  handle_connection(conn, buffer);
+}
 
 void main(string[] args)
 {
-  for (int i=0; i < 1_000_000; ++i)
+/*
+  for (int i=0; i < 1; ++i)
   {
     test();
   }
   return;
-
+*/
+/*
   auto p = new MyHttpParser();
 
   auto str1 = "GET /hallo?abc=123&def=123%20456 HTTP/1.1\r\n" ~
@@ -129,35 +150,24 @@ void main(string[] args)
   auto str = str1.dup;
   size_t sz=0;
 
-  for(int i=3; !p.is_finished(); i+=3)
-  {
-    writeln("---");
-    sz = p.execute(str[0..i], sz);
-    writeln("sz: ", sz);
-  }
+  p.execute(str[0..3]);
+  p.execute(str[3..$]);
 
   writeln("rest: ", str[sz..$]);
 
-  //writeln(p.headers);
-
-  auto server = new TcpSocket();
+  writeln(p.headers);
+*/
+  TcpSocket server = new TcpSocket();
 
   ushort port = to!ushort(args[1]);
   server.bind(parseAddress("127.0.0.1", port));
-  server.listen(5);
+  server.listen(10);
+  scope(exit) server.shutdown(SocketShutdown.BOTH);
+  scope(exit) server.close();
   writeln("ready to accept on port ", port);
 
-  auto buffer = new char[1024];
   for (;;) {
-    auto conn = server.accept();
-    //conn.setOption(SocketOptionLevel.SOCKET, SocketOption.TCP_NODELAY, 0);
-    //writeln("got connection");
-    handle_connection(conn, buffer);
-
-    conn.shutdown(SocketShutdown.BOTH);
-    conn.close();
+    Socket conn = server.accept();
+    s(conn);
   }
-
-  server.shutdown(SocketShutdown.BOTH);
-  server.close();
 }

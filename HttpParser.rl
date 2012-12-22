@@ -7,15 +7,25 @@
 
 // compile with ragel -G2 -D ...
 
-/*
-static void snake_upcase_char(char *c)
+import std.stdio;
+
+static char upcase_char(char c)
 {
-    if (*c >= 'a' && *c <= 'z')
-      *c &= ~0x20;
-    else if (*c == '-')
-      *c = '_';
+    if (c >= 'a' && c <= 'z')
+      return (c & ~0x20);
+    else if (c == '-')
+      return ('_');
+    else
+      return c;
 }
-*/
+
+static void upcase_str(char []str)
+{
+  foreach (ref char c; str)
+  {
+    c = upcase_char(c);
+  }
+}
 
 /** Machine **/
 
@@ -23,47 +33,56 @@ static void snake_upcase_char(char *c)
   
   machine http_parser;
 
-  action mark { mark = current_position(buffer, fpc); }
+  action mark { mark = fpc; }
 
-  action start_field { field_start = current_position(buffer, fpc); }
-  action snake_upcase_field { /*snake_upcase_char(fpc);*/ }
-  action write_field { field_end = current_position(buffer, fpc); }
-
-  action start_value { mark = current_position(buffer, fpc); }
-  action write_value {
-    on_http_field(buffer[field_start .. field_end],
-                  buffer[mark .. current_position(buffer, fpc)]);
-  }
-
-  action request_method { 
-    on_request_method(buffer[mark .. current_position(buffer, fpc)]);
-  }
-
-  action request_uri { 
-    on_request_uri(buffer[mark .. current_position(buffer, fpc)]);
+  action request_uri {
+    on_request_uri(get_mark_str(mark, fpc, buffer));
+    mark = null;
   }
 
   action fragment {
-    on_fragment(buffer[mark .. current_position(buffer, fpc)]);
+    on_fragment(get_mark_str(mark, fpc, buffer));
+    mark = null;
   }
 
-  action start_query { query_start = current_position(buffer, fpc); }
-
-  action query_string {
-    on_query_string(buffer[query_start .. current_position(buffer, fpc)]);
+  action request_method { 
+    on_request_method(get_mark_str(mark, fpc, buffer));
+    mark = null;
   }
 
   action http_version {	
-    on_http_version(buffer[mark .. current_position(buffer, fpc)]);
+    on_http_version(get_mark_str(mark, fpc, buffer));
+    mark = null;
+  }
+
+  action write_field {
+    saved_field = get_mark_str(mark, fpc, buffer);
+    upcase_str(saved_field);
+    mark = null;
+  }
+
+  action write_value {
+    on_http_field(saved_field, get_mark_str(mark, fpc, buffer));
+    saved_field.length = 0;
+    mark = null;
   }
 
   action request_path {
-    on_request_path(buffer[mark .. current_position(buffer, fpc)]);
+    on_request_path(get_mark_str(mark, fpc, buffer));
+  }
+
+  action start_query { 
+    assert(mark);
+    query_pos = saved_mark_buf.length + (fpc - mark);
+  }
+
+  action query_string {
+    on_query_string(get_mark_str(mark, fpc, buffer)[query_pos..$]);
+    query_pos = 0;
   }
 
   action done { 
-    body_start = current_position(buffer, fpc) + 1;
-    on_header_done(buffer[body_start .. $]);
+    on_header_done(buffer[(fpc - buffer.ptr + 1) .. $]);
     fbreak;
   }
 
@@ -77,13 +96,12 @@ static void snake_upcase_char(char *c)
 class HttpParser
 {
   int saved_cs;
-  size_t body_start;
-  size_t nread;
-  size_t mark;
+  char saved_mark_buf[];
+  char saved_field[];
 
-  size_t field_start;
-  size_t field_end;
-  size_t query_start;
+  size_t nread;
+
+  private size_t query_pos;
 
   // dummy visitor 
   void on_http_version(const char v[]) {}
@@ -95,12 +113,6 @@ class HttpParser
   void on_fragment(const char v[]) {}
   void on_header_done(const char v[]) {}
 
-  size_t current_position(const char buffer[], const char *fpc)
-  {
-    assert(fpc >= buffer.ptr);
-    return fpc - buffer.ptr;
-  }
-
   this()
   {
     int cs = 0;
@@ -108,37 +120,51 @@ class HttpParser
     saved_cs = cs;
   }
 
+  char[] get_mark_str(char *mark, char *fpc, char buffer[])
+  {
+    assert(mark);
+    auto buf = saved_mark_buf ~ buffer[(mark - buffer.ptr) .. (fpc - buffer.ptr)];
+    saved_mark_buf.length = 0;
+    return buf;
+  }
+
   /** exec **/
 
-  //
-  // The passed buffer must always contain *all* data.
-  //
-  size_t execute(char buffer[], size_t off)
+  size_t execute(/*const*/ char buffer[])
   {
     // Ragel uses: cs, p, pe
-    char *p = &buffer[off];      // pointer to start of data
-    char *pe = &buffer[$-1] + 1; // pointer to end of data
-    int cs = saved_cs;                  // current ragel machine state 
+    int cs = saved_cs;           // current ragel machine state
+    assert(buffer.length > 0);
+    /*const*/ char *p = &buffer[0];        // pointer to start of data
+    /*const*/ char *pe = &buffer[$-1] + 1; // pointer to end of data
 
-    assert(off <= buffer.length); // offset past end of buffer
-
-    assert(pe - p == buffer.length - off); // pointers aren't same distance
+    /*const*/ char *mark = null;
+ 
+    if (saved_mark_buf.length > 0)
+    {
+      // we are in an mark section so continue the marking
+      mark = p;
+    }
 
     // exec begin
     %% write exec;
     // exec end
 
     if (!has_error())
+    {
       saved_cs = cs;
+    }
 
-    nread += p - (&buffer[off]);
+    if (mark)
+    {
+      // within a marking the buffer ends. save what we currently read in
+      saved_mark_buf ~= buffer[(mark - buffer.ptr) .. $];
+      assert(saved_mark_buf.length > 0);
+    }
+
+    nread += (p - buffer.ptr);
 
     assert(p <= pe); // buffer overflow after parsing execute
-    assert(nread <= buffer.length); // nread longer than length
-    assert(body_start <= buffer.length); // body starts after buffer end
-    assert(mark < buffer.length);  // mark is after buffer end
-    assert(field_end <= buffer.length); // field has length longer than whole buffer
-    assert(field_start < buffer.length); // field starts after buffer end
 
     return nread;
   }
